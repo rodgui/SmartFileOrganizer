@@ -1042,7 +1042,7 @@ class DocumentOrganizerApp:
             # Scan the directory with progress tracking
             files = self.file_analyzer.scan_directory(
                 directory,
-                batch_size=batch_size,
+                batch_size=int(batch_size) if batch_size else None,
                 batch_delay=batch_delay,
                 callback=progress_callback
             )
