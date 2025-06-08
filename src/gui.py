@@ -1064,7 +1064,7 @@ class DocumentOrganizerApp:
                 message_type, message = self.queue.get_nowait()
 
                 if message_type == "progress":
-                    current, total, status_message = message
+                    current, total, status_message = message[:3] if isinstance(message, (list, tuple)) and len(message) >= 3 else (0, 0, str(message))
                     if total > 0:
                         self.progress_var.set(current / total * 100)
                     else:
