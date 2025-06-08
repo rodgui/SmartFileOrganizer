@@ -83,17 +83,38 @@ class DocumentOrganizerApp:
                     raise ValueError("Missing required V2 components")
                 
                 # Use compatibility layer to create V1-compatible instances
-                file_parser_adapter = compat_manager.get_adapter('FileParser') if compat_manager else None
-                file_organizer_adapter = compat_manager.get_adapter('FileOrganizer') if compat_manager else None
-                ai_analyzer_adapter = compat_manager.get_adapter('AIAnalyzer') if compat_manager else None
+                # SettingsManager
                 settings_adapter = compat_manager.get_adapter('SettingsManager') if compat_manager else None
-                duplicate_detector_adapter = compat_manager.get_adapter('DuplicateDetector') if compat_manager else None
+                if settings_adapter:
+                    self.settings_manager = settings_adapter.create_instance()
+                    logger.info("Using V2 SettingsManager via adapter.")
+                else:
+                    logger.warning("SettingsManager V2 adapter not found, falling back to V1 SettingsManager.")
+                    self.settings_manager = SettingsManager()
+
+                # FileOrganizer
+                file_organizer_adapter = compat_manager.get_adapter('FileOrganizer') if compat_manager else None
+                if file_organizer_adapter:
+                    self.file_organizer = file_organizer_adapter.create_instance()
+                    logger.info("Using V2 FileOrganizer via adapter.")
+                else:
+                    logger.warning("FileOrganizer V2 adapter not found, falling back to V1 FileOrganizer.")
+                    self.file_organizer = FileOrganizer()
                 
-                # Create V1-compatible instances through adapters
-                self.file_analyzer = FileAnalyzer()  # Keep V1 for now, will adapt later
-                self.file_organizer = file_organizer_adapter.create_instance()
-                self.settings_manager = settings_adapter.create_instance()
-                
+                # AIAnalyzer
+                ai_analyzer_adapter = compat_manager.get_adapter('AIAnalyzer') if compat_manager else None
+                if ai_analyzer_adapter:
+                    self.ai_analyzer = ai_analyzer_adapter.create_instance(settings_manager=self.settings_manager)
+                    logger.info("Using V2 AIAnalyzer via adapter.")
+                else:
+                    logger.warning("AIAnalyzer V2 adapter not found, falling back to V1 AIAnalyzer.")
+                    self.ai_analyzer = AIAnalyzer(settings_manager=self.settings_manager)
+
+                # FileAnalyzer (Kept as V1 for now as per original comments)
+                self.file_analyzer = FileAnalyzer()
+                # file_parser_adapter = compat_manager.get_adapter('FileParser') if compat_manager else None # Example for future
+                # duplicate_detector_adapter = compat_manager.get_adapter('DuplicateDetector') if compat_manager else None # Example for future
+
                 # Store plugin manager and compatibility manager for future use
                 self.plugin_manager = plugin_manager
                 self.compat_manager = compat_manager
@@ -104,24 +125,29 @@ class DocumentOrganizerApp:
                 logger.error(f"Error initializing with V2 components: {e}")
                 logger.warning("Falling back to V1 components")
                 self.use_v2 = False
+                self.settings_manager = SettingsManager()
                 self.file_analyzer = FileAnalyzer()
                 self.file_organizer = FileOrganizer()
-                self.settings_manager = SettingsManager()
+                self.ai_analyzer = AIAnalyzer(settings_manager=self.settings_manager)
         else:
             # Standard V1 initialization
+            self.settings_manager = SettingsManager()
             self.file_analyzer = FileAnalyzer()
             self.file_organizer = FileOrganizer()
-            self.settings_manager = SettingsManager()
+            self.ai_analyzer = AIAnalyzer(settings_manager=self.settings_manager)
+
+        # These V1 components are initialized after the V1/V2 specific blocks for core components.
+        # This is acceptable as per the subtask focusing on SettingsManager, FileOrganizer, and AIAnalyzer.
         self.duplicate_detector = DuplicateDetector()
         self.search_engine = SearchEngine()
         self.tag_manager = TagManager()
         self.image_analyzer = ImageAnalyzer()
-        self.rule_manager = self.file_organizer.rule_manager
+        self.rule_manager = self.file_organizer.rule_manager # rule_manager depends on file_organizer
         
         # Initialize UI style
         self.style = ttk.Style()
 
-        # Load settings
+        # Load settings - self.settings_manager is now guaranteed to be initialized
         self.settings = self.settings_manager.load_settings()
 
         # Initialize variables
@@ -233,8 +259,8 @@ class DocumentOrganizerApp:
         # Store analyzed files
         self.analyzed_files = []
         
-        # Initialize AI analyzer
-        self.ai_analyzer = AIAnalyzer(settings_manager=self.settings_manager)
+        # Note: self.ai_analyzer is now initialized within the V2/V1 blocks above.
+        # The generic instantiation below this block should be removed if it was there.
 
         # Create widgets
         self._create_widgets()
@@ -279,11 +305,36 @@ class DocumentOrganizerApp:
         # Create widgets for each tab
         self._create_main_tab()
         self._create_settings_widgets()  # Use the existing method
+        self._create_api_keys_settings_tab() # Call the new method for API keys tab
         self._create_rules_tab()
         self._create_images_tab()
         self._create_batch_tab()
         # Skip OCR tab for now as it's not critical
         # self._create_ocr_tab()
+
+    def _create_api_keys_settings_tab(self):
+        """Create widgets for the API Keys settings tab"""
+        # Google Gemini API Key Frame
+        google_api_frame = ttk.LabelFrame(self.api_keys_settings_tab, text="Google Gemini API Key", padding=10)
+        google_api_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        ttk.Label(google_api_frame, text="Google API Key:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        google_api_key_entry = ttk.Entry(google_api_frame, width=50, show='*')
+        google_api_key_entry.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=5)
+        google_save_button = ttk.Button(google_api_frame, text="Save Key") # Placeholder command
+        google_save_button.grid(row=0, column=2, padx=5, pady=5)
+        google_api_frame.columnconfigure(1, weight=1) # Make entry expandable
+
+        # OpenAI API Key Frame
+        openai_api_frame = ttk.LabelFrame(self.api_keys_settings_tab, text="OpenAI API Key", padding=10)
+        openai_api_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        ttk.Label(openai_api_frame, text="OpenAI API Key:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        openai_api_key_entry = ttk.Entry(openai_api_frame, width=50, show='*')
+        openai_api_key_entry.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=5)
+        openai_save_button = ttk.Button(openai_api_frame, text="Save Key") # Placeholder command
+        openai_save_button.grid(row=0, column=2, padx=5, pady=5)
+        openai_api_frame.columnconfigure(1, weight=1) # Make entry expandable
 
     def _create_main_tab(self):
         """Create the main tab content"""
@@ -954,7 +1005,7 @@ class DocumentOrganizerApp:
         self.status_frame.columnconfigure(1, weight=1)
         self.status_frame.columnconfigure(2, weight=1)
 
-    def browse_source(self):
+    def browse_source(self, save=False):
         """Browse for source directory (Windows style)"""
         # Use standard tkinter dialog (works on all platforms)
         directory = filedialog.askdirectory(
@@ -965,8 +1016,10 @@ class DocumentOrganizerApp:
             # Convert to OS-appropriate path format
             directory = os.path.normpath(directory)
             self.source_dir.set(directory)
+            if save:
+                self.save_directory("source")
 
-    def browse_target(self):
+    def browse_target(self, save=False):
         """Browse for target directory (Windows style)"""
         # Use standard tkinter dialog (works on all platforms)
         directory = filedialog.askdirectory(
@@ -977,6 +1030,8 @@ class DocumentOrganizerApp:
             # Convert to OS-appropriate path format
             directory = os.path.normpath(directory)
             self.target_dir.set(directory)
+            if save:
+                self.save_directory("target")
 
     def start_scan(self):
         """Start the file scanning process in a separate thread"""
@@ -1584,7 +1639,7 @@ class DocumentOrganizerApp:
             messagebox.showerror(
                 "Error", f"Could not save summary file format setting: {str(e)}")
                 
-    def browse_rules_file(self):
+    def browse_rules_file(self, save=False):
         """Browse for a rules file"""
         try:
             file_path = filedialog.askopenfilename(
@@ -1592,6 +1647,8 @@ class DocumentOrganizerApp:
                 filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")])
             if file_path:
                 self.rules_file_var.set(file_path)
+                if save:
+                    self.save_organization_rules()
         except Exception as e:
             logger.error(f"Error browsing for rules file: {str(e)}")
             messagebox.showerror(
@@ -1697,6 +1754,10 @@ class DocumentOrganizerApp:
             self.settings_notebook, padding=10)
         self.settings_notebook.add(
             self.general_settings_tab, text="General Settings")
+
+        # API Keys Settings Tab
+        self.api_keys_settings_tab = ttk.Frame(self.settings_notebook, padding=10)
+        self.settings_notebook.add(self.api_keys_settings_tab, text="API Keys")
 
         # Directory settings
         self.dir_settings_frame = ttk.LabelFrame(

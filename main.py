@@ -112,9 +112,12 @@ def main():
             
             # If just testing plugins, run the test and exit
             if args.test_plugins:
+                project_root = os.path.dirname(os.path.abspath(__file__))
+                sys.path.insert(0, project_root)
                 # Import our test script
-                import test_v2_plugins
+                from ai_document_organizer_v2.tests import test_v2_plugins
                 test_v2_plugins.main()
+                sys.path.pop(0) # Clean up sys.path
                 return
         except Exception as e:
             logger.error(f"Error initializing V2 plugin system: {e}")
