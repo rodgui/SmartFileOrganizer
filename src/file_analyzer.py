@@ -319,88 +319,23 @@ class FileAnalyzer:
         # Create a queue for IPC
         result_queue = multiprocessing.Queue()
 
-        # Define a worker function that can be pickled
-        def worker_func(file_path, file_ext, queue):
-            try:
-                # Create new instances for each process
-                parser = FileParser()
-                ai_analyzer = AIAnalyzer()
-                image_analyzer = ImageAnalyzer()
-                media_analyzer = MediaAnalyzer()
-                transcription_service = TranscriptionService()
-
-                # Get basic file info
-                file_info = self._get_file_info(file_path, file_ext)
-
-                # Extract text content
-                try:
-                    text_content = parser.extract_text(file_path, file_ext)
-                    file_info['text_content'] = text_content
-                except Exception as e:
-                    logger.error(
-                        f"Error extracting text from {file_path}: {str(e)}")
-                    file_info['text_content'] = f"Error extracting text: {str(e)}"
-
-                # Extract metadata
-                try:
-                    metadata = parser.extract_metadata(file_path, file_ext)
-                    file_info['metadata'] = metadata
-                except Exception as e:
-                    logger.error(
-                        f"Error extracting metadata from {file_path}: {str(e)}")
-                    file_info['metadata'] = {'error': str(e)}
-
-                # Analyze with AI for document files
-                if file_ext.lower() not in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp']:
-                    try:
-                        ai_result = ai_analyzer.analyze_text(text_content)
-                        file_info['ai_analysis'] = ai_result
-                    except Exception as e:
-                        logger.error(
-                            f"Error analyzing {file_path} with AI: {str(e)}")
-                        file_info['ai_analysis'] = {'error': str(e)}
-                # Analyze with image analyzer for image files
-                elif file_ext.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp']:
-                    try:
-                        image_result = image_analyzer.analyze_image(file_path)
-                        file_info['image_analysis'] = image_result
-                    except Exception as e:
-                        logger.error(
-                            f"Error analyzing image {file_path}: {str(e)}")
-                        file_info['image_analysis'] = {'error': str(e)}
-                # Analyze with media analyzer for audio files
-                elif file_ext.lower() in ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a']:
-                    try:
-                        audio_result = media_analyzer.analyze_audio(file_path)
-                        file_info['audio_analysis'] = audio_result
-                    except Exception as e:
-                        logger.error(
-                            f"Error analyzing audio {file_path}: {str(e)}")
-                        file_info['audio_analysis'] = {'error': str(e)}
-                # Analyze with media analyzer for video files
-                elif file_ext.lower() in ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.webm', '.flv']:
-                    try:
-                        video_result = media_analyzer.analyze_video(file_path)
-                        file_info['video_analysis'] = video_result
-                    except Exception as e:
-                        logger.error(
-                            f"Error analyzing video {file_path}: {str(e)}")
-                        file_info['video_analysis'] = {'error': str(e)}
-
-                # Put result in queue
-                queue.put(file_info)
-                return True
-            except Exception as e:
-                logger.error(f"Worker error processing {file_path}: {str(e)}")
-                queue.put(None)
-                return False
+    @staticmethod
+    def _worker_func(file_path, file_ext, result_queue, file_analyzer_instance):
+        try:
+            # Use the existing _analyze_file method from the passed instance
+            analysis_result = file_analyzer_instance._analyze_file(file_path, file_ext)
+            result_queue.put(analysis_result)
+        except Exception as e:
+            logger.error(f"Worker error processing {file_path}: {str(e)}")
+            result_queue.put(None)
+            return False
 
         # Start processes
         processes = []
         for file_path, file_ext in file_batch:
             p = multiprocessing.Process(
-                target=worker_func,
-                args=(file_path, file_ext, result_queue)
+                target=FileAnalyzer._worker_func,
+                args=(file_path, file_ext, result_queue, self) # Pass self to the static method
             )
             processes.append(p)
             p.start()
