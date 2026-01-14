@@ -93,8 +93,8 @@ def get_ai_classifier(backend: AIBackend, model: Optional[str] = None):
         return None
     
     if backend == "local":
-        # Use Ollama
-        return LLMClassifier(model=model or "qwen2.5:14b")
+        # Use Ollama with model override
+        return LLMClassifier(backend="ollama", model=model)
     
     if backend == "gemini":
         # Import Gemini analyzer from V1
