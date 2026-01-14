@@ -24,7 +24,7 @@ import json
 import re
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
