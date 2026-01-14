@@ -201,9 +201,13 @@ class ExecutionResult(BaseModel):
 # Export
 # =============================================================================
 
+# Alias for backward compatibility
+ClassificationResult = Classification
+
 __all__ = [
     "FileRecord",
-    "Classification", 
+    "Classification",
+    "ClassificationResult",  # Alias
     "PlanItem",
     "ExecutionResult",
     "VALID_CATEGORIES",

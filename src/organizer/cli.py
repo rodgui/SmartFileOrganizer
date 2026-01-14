@@ -33,7 +33,7 @@ import click
 from src.organizer.models import FileRecord, Classification, PlanItem, VALID_CATEGORIES
 from src.organizer.scanner import Scanner
 from src.organizer.extractor import Extractor
-from src.organizer.rules import RuleEngine, load_rules_from_yaml
+from src.organizer.rules import RuleEngine, Rule, load_rules_from_yaml
 from src.organizer.llm import LLMClassifier, OllamaClient
 from src.organizer.planner import Planner
 from src.organizer.executor import Executor
@@ -539,7 +539,7 @@ def info():
     
     # Settings
     settings = get_settings_manager()
-    click.echo(f"⚙️  Settings: {settings.settings_path}")
+    click.echo(f"⚙️  Settings: {settings.settings_file}")
     click.echo(f"   Default backend: {settings.get_default_backend()}\n")
     
     # Ollama
@@ -634,29 +634,7 @@ async def plan_async(
     
     # Generate plan
     plan = generate_plan(classified, output_plan)
-    logger.info(f"Plano salvo: {output_plan}")    plan = generate_plan(classified, output_plan)    # Generate plan                classified.extend(batch_results)            batch_results = await llm_classifier.classify_batch(batch)                        logger.info(f"Processando batch {i//batch_size + 1}/{(len(needs_llm)+batch_size-1)//batch_size}")            batch = needs_llm[i:i+batch_size]        for i in range(0, len(needs_llm), batch_size):        batch_size = 8  # Ajuste conforme VRAM disponível    if needs_llm:    # 🔥 Processa LLM em batches        logger.info(f"Regras: {len(classified)}, LLM necessário: {len(needs_llm)}")                needs_llm.append(file_record)        else:            classified.append(rule_result)        if rule_result and rule_result.confidence >= 85:        rule_result = apply_rules(file_record, rules)    for file_record in files:        needs_llm = []    needs_llm = []
-    
-    for file_record in files:
-        rule_result = apply_rules(file_record, rules)
-        if rule_result and rule_result.confidence >= 85:
-            classified.append(rule_result)
-        else:
-            needs_llm.append(file_record)
-    
-    logger.info(f"Regras: {len(classified)}, LLM necessário: {len(needs_llm)}")
-    
-    # 🔥 Processa LLM em batches
-    if needs_llm:
-        batch_size = 8  # Ajuste conforme VRAM disponível
-        for i in range(0, len(needs_llm), batch_size):
-            batch = needs_llm[i:i+batch_size]
-            logger.info(f"Processando batch {i//batch_size + 1}/{(len(needs_llm)+batch_size-1)//batch_size}")
-            
-            batch_results = await llm_classifier.classify_batch(batch)
-            classified.extend(batch_results)
-    
-    # Generate plan
-    plan = generate_plan(classified, output_plan)
     logger.info(f"Plano salvo: {output_plan}")
     
     return plan
+

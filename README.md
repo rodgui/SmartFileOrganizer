@@ -20,7 +20,7 @@ git clone https://github.com/whoisdsmith/SmartFileOrganizer.git
 cd SmartFileOrganizer
 pip install -r requirements.txt
 
-# Check status
+# Check system status (GPU detection, backends)
 python organize.py info
 
 # Organize files (dry-run)
@@ -30,26 +30,77 @@ python organize.py plan ~/Downloads
 python organize.py execute plans/plan_*.json --apply
 ```
 
+### ⚙️ Configuration
+
+Settings are managed via YAML files in `configs/`:
+
+- **`settings.yaml`**: Backend configuration (Ollama URL, models, timeouts)
+- **`llm_config.yaml`**: GPU-specific batch sizes (auto-detected)
+- **`rules.yaml`**: Classification rules
+- **`categories.yaml`**: Category definitions
+
+**Example: Edit Ollama settings**
+```yaml
+# configs/settings.yaml
+ai_backends:
+  ollama:
+    base_url: "http://localhost:11434"  # Change if Ollama runs remotely
+    default_model: "qwen2.5:7b"         # Or qwen2.5:14b for better quality
+    timeout: 45
+```
+
 [📖 Full Quick Start Guide](docs/getting-started/QUICK_START.md)
 
 ## 🎯 AI Backends
 
-| Backend | Command | Privacy | Cost | Speed |
-|---------|---------|---------|------|-------|
-| **Local (Ollama)** | `--local` | ✅ Offline | Free | Good |
-| **Google Gemini** | `--gemini` | Cloud | Pay | Fast |
-| **OpenAI** | `--openai` | Cloud | Pay | Fast |
-| **Rules Only** | `--rules-only` | ✅ Offline | Free | Fastest |
+| Backend | Command | Privacy | Cost | Speed | Config |
+|---------|---------|---------|------|-------|--------|
+| **Local (Ollama)** | `--local` | ✅ Offline | Free | Good | `configs/settings.yaml` |
+| **Google Gemini** | `--gemini` | Cloud | Pay | Fast | Env: `GOOGLE_API_KEY` |
+| **OpenAI** | `--openai` | Cloud | Pay | Fast | Env: `OPENAI_API_KEY` |
+| **Rules Only** | `--rules-only` | ✅ Offline | Free | Fastest | `configs/rules.yaml` |
 
 ```bash
-# Use local AI (requires Ollama)
+# Use local AI (auto-detects GPU, configures batch size)
 python organize.py --local plan ~/Documents
 
-# Use Gemini
+# Override model
+python organize.py --local --model qwen2.5:14b plan ~/Documents
+
+# Override GPU tier (if detection fails)
+python organize.py --local --gpu-tier high_end plan ~/Documents
+
+# Manual batch configuration
+python organize.py --local --batch-size 16 --max-concurrent 8 plan ~/Documents
+
+# Use Gemini (set GOOGLE_API_KEY first)
+export GOOGLE_API_KEY=your_key  # Linux/macOS
+set GOOGLE_API_KEY=your_key     # Windows CMD
 python organize.py --gemini plan ~/Documents
 
 # Use rules only (no AI)
 python organize.py --rules-only plan ~/Documents
+```
+
+### 🎮 GPU Optimization
+
+Ollama backend **auto-detects GPU** and configures optimal batch processing:
+
+| GPU Tier | VRAM | Batch Size | Concurrent | Model |
+|----------|------|------------|------------|-------|
+| Ultra High | 48GB+ | 32 | 16 | qwen2.5:14b |
+| High End | 24GB+ | 16 | 8 | qwen2.5:14b |
+| Upper Mid | 16GB+ | 12 | 6 | qwen2.5:7b |
+| Mid Range | 12GB+ | 8 | 4 | qwen2.5:7b |
+| Low End | 6GB+ | 4 | 2 | qwen2.5:3b |
+| CPU Only | 0GB | 2 | 1 | qwen2.5:3b |
+
+**Check your detected GPU:**
+```bash
+python organize.py info
+# Output:
+# 🎮 GPU detected: 15.9GB VRAM (upper_mid_range)
+# Recommended: batch=12, concurrent=6
 ```
 
 ## 📋 Supported Formats
@@ -87,14 +138,19 @@ SmartFileOrganizer/
 │   │   ├── scanner.py       # Directory scanner
 │   │   ├── extractor.py     # Content extraction
 │   │   ├── rules.py         # Rule engine
-│   │   ├── llm.py           # LLM classifier
+│   │   ├── llm.py           # LLM classifier (Ollama/Gemini/OpenAI)
+│   │   ├── gpu_detector.py  # GPU auto-detection
 │   │   ├── planner.py       # Plan generation
 │   │   └── executor.py      # Safe execution
+│   ├── settings_manager.py  # YAML settings loader
 │   ├── ai_analyzer.py       # Gemini integration
 │   ├── openai_analyzer.py   # OpenAI integration
 │   └── gui.py               # GUI (legacy)
 ├── configs/
-│   └── rules.yaml           # Classification rules
+│   ├── settings.yaml        # 🆕 Backend configuration
+│   ├── llm_config.yaml      # 🆕 GPU tiers
+│   ├── rules.yaml           # Classification rules
+│   └── categories.yaml      # Category definitions
 ├── docs/                    # Documentation
 ├── tests/                   # 261+ tests
 └── plans/                   # Generated plans

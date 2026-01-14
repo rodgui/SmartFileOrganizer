@@ -31,7 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 import httpx
 
-from src.organizer.models import FileRecord, Classification, VALID_CATEGORIES
+from src.organizer.models import FileRecord, Classification, ClassificationResult, VALID_CATEGORIES
 from ..settings_manager import get_settings_manager
 from .gpu_detector import get_detector
 
