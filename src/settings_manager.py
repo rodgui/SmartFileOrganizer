@@ -1,8 +1,13 @@
+"""
+Centralized settings management with YAML persistence.
+"""
+
 import os
 import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
+import yaml
 
 logger = logging.getLogger("AIDocumentOrganizer")
 
@@ -11,6 +16,8 @@ class SettingsManager:
     """
     Manages application settings and user preferences
     """
+
+    DEFAULT_SETTINGS_PATH = Path(__file__).parent.parent / "configs" / "settings.yaml"
 
     DEFAULT_SETTINGS = {
         "batch_size": 5,
@@ -31,11 +38,13 @@ class SettingsManager:
             "suggest_tags": False
         },
         "ai_service": {
-            "service_type": "google",  # 'google' or 'openai'
+            "service_type": "google",  # 'google', 'openai', or 'ollama'
             "google_api_key": "",      # Stored encrypted in actual implementation
             "openai_api_key": "",      # Stored encrypted in actual implementation
             "google_model": "models/gemini-2.0-flash",  # Default Google model
             "openai_model": "gpt-4-turbo-preview",      # Default OpenAI model
+            "ollama_url": "http://localhost:11434",     # Ollama server URL
+            "ollama_model": "llama3.2",                 # Default Ollama model
             "requests_per_minute": 30,   # Default API rate limit
             "max_retries": 5            # Maximum number of retries for rate limit errors
         },
@@ -362,3 +371,68 @@ class SettingsManager:
             Dictionary with document summarization settings
         """
         return self.settings.get("document_summarization", self.DEFAULT_SETTINGS["document_summarization"])
+    
+    def get_backend_config(self, backend: str) -> Dict[str, Any]:
+        """
+        Get configuration for specific AI backend.
+        
+        Args:
+            backend: "ollama", "gemini", or "openai"
+        
+        Returns:
+            Backend configuration dict
+        """
+        return self.settings.get("ai_backends", {}).get(backend, {})
+
+    def get_default_backend(self) -> str:
+        """Get default backend from settings."""
+        return self.settings.get("default_backend", "ollama")
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+        Get setting by dot-notation key.
+        
+        Args:
+            key: Dot-separated key (e.g., "ai_backends.ollama.base_url")
+            default: Default value if key not found
+        
+        Returns:
+            Setting value
+        """
+        keys = key.split('.')
+        value = self.settings
+        
+        for k in keys:
+            if isinstance(value, dict):
+                value = value.get(k)
+            else:
+                return default
+            
+            if value is None:
+                return default
+        
+        return value
+
+    def save(self):
+        """Save current settings to YAML file."""
+        try:
+            self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(self.settings_path, 'w', encoding='utf-8') as f:
+                yaml.safe_dump(self.settings, f, default_flow_style=False, sort_keys=False)
+                
+            logger.info(f"Settings saved to {self.settings_path}")
+            
+        except Exception as e:
+            logger.error(f"Failed to save settings: {e}")
+
+
+# Global instance
+_settings_manager: Optional[SettingsManager] = None
+
+def get_settings_manager() -> SettingsManager:
+    """Get global settings manager instance."""
+    global _settings_manager
+    if _settings_manager is None:
+        _settings_manager = SettingsManager()
+    return _settings_manager

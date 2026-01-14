@@ -1,0 +1,217 @@
+# =============================================================================
+# Local File Organizer - Rules Configuration
+# =============================================================================
+# Rules are evaluated in order. First match wins.
+# Each rule must have: rule_id, pattern, category, confidence
+# Optional: subcategory, keywords, min_size_mb, max_size_mb
+# =============================================================================
+
+rules:
+  # -------------------------------------------------------------------------
+  # Image files - deterministic by extension
+  # -------------------------------------------------------------------------
+  - rule_id: IMG_BY_YEAR
+    description: "Organize images by year"
+    pattern: "*.{jpg,jpeg,png,gif,heic,webp,bmp,tiff,tif,raw,cr2,nef,arw}"
+    category: "05_Pessoal"
+    subcategory: "Midia/Imagens"
+    organize_by: year
+    confidence: 100
+
+  # -------------------------------------------------------------------------
+  # Video files - deterministic by extension
+  # -------------------------------------------------------------------------
+  - rule_id: VIDEO_BY_YEAR
+    description: "Organize videos by year"
+    pattern: "*.{mp4,avi,mkv,mov,wmv,flv,webm,m4v,mpeg,mpg,3gp}"
+    category: "05_Pessoal"
+    subcategory: "Midia/Videos"
+    organize_by: year
+    confidence: 100
+
+  # -------------------------------------------------------------------------
+  # Audio files - deterministic by extension
+  # -------------------------------------------------------------------------
+  - rule_id: AUDIO_BY_YEAR
+    description: "Organize audio by year"
+    pattern: "*.{mp3,wav,flac,aac,ogg,wma,m4a,opus,aiff}"
+    category: "05_Pessoal"
+    subcategory: "Midia/Audio"
+    organize_by: year
+    confidence: 100
+
+  # -------------------------------------------------------------------------
+  # Archives/Compressed files
+  # -------------------------------------------------------------------------
+  - rule_id: ARCHIVES
+    description: "Compressed/archive files"
+    pattern: "*.{zip,rar,7z,tar,gz,bz2,xz,tgz}"
+    category: "05_Pessoal"
+    subcategory: "Arquivos_Compactados"
+    organize_by: year
+    confidence: 95
+
+  # -------------------------------------------------------------------------
+  # Books - large PDFs with book-related keywords
+  # -------------------------------------------------------------------------
+  - rule_id: PDF_BOOKS
+    description: "Large PDFs with book keywords"
+    pattern: "*.pdf"
+    min_size_mb: 5
+    keywords:
+      - livro
+      - book
+      - ebook
+      - manual
+      - handbook
+      - guide
+      - tutorial
+      - textbook
+    category: "04_Livros"
+    confidence: 95
+
+  # -------------------------------------------------------------------------
+  # Ebooks (EPUB, MOBI, AZW)
+  # -------------------------------------------------------------------------
+  - rule_id: EBOOKS
+    description: "E-book file formats"
+    pattern: "*.{epub,mobi,azw,azw3,fb2,djvu}"
+    category: "04_Livros"
+    confidence: 100
+
+  # -------------------------------------------------------------------------
+  # Financial documents - invoices, receipts
+  # -------------------------------------------------------------------------
+  - rule_id: INVOICES
+    description: "Financial documents with invoice keywords"
+    pattern: "*.{pdf,docx,doc}"
+    keywords:
+      - fatura
+      - invoice
+      - nf
+      - nota fiscal
+      - recibo
+      - receipt
+      - boleto
+      - pagamento
+      - payment
+    category: "02_Financas"
+    subcategory: "Faturas"
+    organize_by: year
+    confidence: 90
+
+  # -------------------------------------------------------------------------
+  # Tax documents
+  # -------------------------------------------------------------------------
+  - rule_id: TAX_DOCS
+    description: "Tax-related documents"
+    pattern: "*.{pdf,docx,doc,xlsx,xls}"
+    keywords:
+      - imposto
+      - irpf
+      - tax
+      - declaracao
+      - receita federal
+      - darf
+      - contribuicao
+    category: "02_Financas"
+    subcategory: "Impostos"
+    organize_by: year
+    confidence: 90
+
+  # -------------------------------------------------------------------------
+  # Contracts
+  # -------------------------------------------------------------------------
+  - rule_id: CONTRACTS
+    description: "Contract documents"
+    pattern: "*.{pdf,docx,doc}"
+    keywords:
+      - contrato
+      - contract
+      - acordo
+      - agreement
+      - termo
+      - terms
+    category: "02_Financas"
+    subcategory: "Contratos"
+    organize_by: year
+    confidence: 85
+
+  # -------------------------------------------------------------------------
+  # Certificates and credentials
+  # -------------------------------------------------------------------------
+  - rule_id: CERTIFICATES
+    description: "Certificates and credentials"
+    pattern: "*.{pdf,docx,doc,png,jpg,jpeg}"
+    keywords:
+      - certificado
+      - certificate
+      - diploma
+      - credencial
+      - credential
+      - conclusao
+      - completion
+    category: "03_Estudos"
+    subcategory: "Certificacoes"
+    organize_by: year
+    confidence: 85
+
+  # -------------------------------------------------------------------------
+  # Presentations - likely work or study
+  # -------------------------------------------------------------------------
+  - rule_id: PRESENTATIONS
+    description: "Presentation files"
+    pattern: "*.{pptx,ppt,key,odp}"
+    category: "01_Trabalho"
+    subcategory: "Apresentacoes"
+    organize_by: year
+    confidence: 80  # Lower confidence, may need LLM refinement
+
+  # -------------------------------------------------------------------------
+  # Spreadsheets - likely work or finance
+  # -------------------------------------------------------------------------
+  - rule_id: SPREADSHEETS
+    description: "Spreadsheet files"
+    pattern: "*.{xlsx,xls,csv,ods}"
+    category: "01_Trabalho"
+    subcategory: "Planilhas"
+    organize_by: year
+    confidence: 75  # Lower confidence, may need LLM refinement
+
+
+# =============================================================================
+# Exclusion Rules (handled by Scanner, but documented here)
+# =============================================================================
+exclusions:
+  directories:
+    - .git
+    - .ssh
+    - .gnupg
+    - .terraform
+    - .vscode
+    - .idea
+    - node_modules
+    - venv
+    - .venv
+    - __pycache__
+    - .pytest_cache
+    - System Volume Information
+    - $RECYCLE.BIN
+    - WindowsApps
+
+  extensions:
+    - .exe
+    - .dll
+    - .sys
+    - .msi
+    - .bat
+    - .ps1
+    - .sh
+    - .cmd
+    - .lnk
+    - .ini
+    - .dat
+    - .tmp
+    - .bak
+
+  min_size_bytes: 1024  # Ignore files < 1KB

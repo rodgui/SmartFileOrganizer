@@ -29,12 +29,14 @@ class OpenAIAnalyzer:
 
         # Define available models
         self.available_models = [
+            "gpt-4.1-nano",        # Fastest, most cost-efficient (Apr 2025)
+            "gpt-4.1-mini",        # Fast and affordable
+            "gpt-4.1",             # Latest GPT-4.1
             "gpt-4o",              # Latest model (May 2024)
             "gpt-4-turbo",         # Fast, powerful model
             "gpt-4-turbo-preview", # Preview version
             "gpt-4",               # Standard GPT-4
             "gpt-3.5-turbo",       # Faster, cheaper model
-            "gpt-3.5-turbo-16k"    # Extended context model
         ]
 
         # Get the selected model from settings if available

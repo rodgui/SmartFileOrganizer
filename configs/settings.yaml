@@ -1,0 +1,60 @@
+# AI Backend Configurations
+ai_backends:
+  ollama:
+    base_url: "http://localhost:11434"
+    default_model: "qwen2.5:7b"
+    timeout: 45
+    # GPU configs loaded from llm_config.yaml
+    
+  gemini:
+    default_model: "gemini-1.5-flash"
+    temperature: 0.3
+    timeout: 30
+    rate_limit: 30  # requests per minute
+    
+  openai:
+    default_model: "gpt-4o-mini"
+    temperature: 0.3
+    timeout: 30
+    organization: null  # Optional
+
+# Default backend (if no flag specified)
+default_backend: "ollama"
+
+# Batch processing (applies to all backends)
+batch_processing:
+  batch_size: 5  # Overridden by GPU detection for Ollama
+  batch_delay: 1.0
+  max_retries: 3
+
+# Content extraction
+content_extraction:
+  max_content_size: 8192  # 8KB
+  pdf_pages: 5
+  image_exif: true
+  audio_metadata: true
+  video_metadata: true
+
+# Organization options
+organization:
+  create_category_folders: true
+  generate_summaries: true
+  include_metadata: true
+  copy_instead_of_move: false
+  detect_duplicates: false
+  apply_tags: false
+
+# Safety
+safety:
+  dry_run_default: true
+  never_delete: true
+  version_conflicts: true
+  excluded_dirs:
+    - ".git"
+    - ".ssh"
+    - "node_modules"
+    - "venv"
+  excluded_extensions:
+    - ".exe"
+    - ".dll"
+    - ".sys"

@@ -1,0 +1,176 @@
+# =============================================================================
+# Local File Organizer - Categories Configuration
+# =============================================================================
+# Defines the target directory structure for organized files
+# =============================================================================
+
+# Base path for organized files (use environment variable or absolute path)
+# Can be overridden via CLI: --base-path "D:\Documents"
+base_path: "${USERPROFILE}\\Documents\\Organizado"
+
+# Naming convention for renamed files
+# Available placeholders: {year}, {month}, {day}, {category}, {subject}, {ext}
+naming_pattern: "{year}-{month:02d}-{day:02d}__{category}__{subject}{ext}"
+
+# Maximum filename length (Windows limit is 255, we use 200 for safety)
+max_filename_length: 200
+
+# =============================================================================
+# Category Definitions
+# =============================================================================
+categories:
+  01_Trabalho:
+    description: "Work-related documents"
+    color: "#3498db"  # Blue
+    subcategories:
+      - Projetos
+      - Clientes
+      - Reunioes
+      - Apresentacoes
+      - Relatorios
+      - Planilhas
+    organize_by:
+      - area
+      - project
+      - year
+    keywords:
+      - trabalho
+      - work
+      - projeto
+      - project
+      - cliente
+      - client
+      - reuniao
+      - meeting
+      - empresa
+      - company
+
+  02_Financas:
+    description: "Financial documents"
+    color: "#27ae60"  # Green
+    subcategories:
+      - Faturas
+      - Impostos
+      - Contratos
+      - Investimentos
+      - Extratos
+      - Recibos
+    organize_by:
+      - type
+      - year
+    keywords:
+      - financeiro
+      - financial
+      - banco
+      - bank
+      - conta
+      - account
+      - dinheiro
+      - money
+
+  03_Estudos:
+    description: "Educational and learning materials"
+    color: "#9b59b6"  # Purple
+    subcategories:
+      - Cursos
+      - Certificacoes
+      - Tutoriais
+      - Livros_Tecnicos
+      - Anotacoes
+    organize_by:
+      - theme
+      - year
+    keywords:
+      - estudo
+      - study
+      - curso
+      - course
+      - aprender
+      - learn
+      - tutorial
+      - aula
+      - class
+
+  04_Livros:
+    description: "Books and e-books"
+    color: "#e67e22"  # Orange
+    subcategories: []  # Organized by author/theme, no fixed subcategories
+    organize_by:
+      - author_or_theme
+    keywords:
+      - livro
+      - book
+      - leitura
+      - reading
+      - autor
+      - author
+
+  05_Pessoal:
+    description: "Personal files and media"
+    color: "#e74c3c"  # Red
+    subcategories:
+      - Midia/Imagens
+      - Midia/Videos
+      - Midia/Audio
+      - Documentos_Pessoais
+      - Familia
+      - Viagens
+      - Hobbies
+    organize_by:
+      - theme
+      - year
+    keywords:
+      - pessoal
+      - personal
+      - foto
+      - photo
+      - video
+      - familia
+      - family
+      - viagem
+      - travel
+
+  90_Inbox_Organizar:
+    description: "Files pending manual review or with low confidence classification"
+    color: "#95a5a6"  # Gray
+    subcategories:
+      - Baixa_Confianca
+      - Falha_Classificacao
+      - Revisar
+    organize_by:
+      - date
+    keywords: []  # Catch-all category
+
+
+# =============================================================================
+# Confidence Thresholds
+# =============================================================================
+thresholds:
+  # Minimum confidence to execute MOVE/RENAME action
+  min_action_confidence: 85
+  
+  # Below this confidence, always route to inbox
+  inbox_threshold: 50
+  
+  # Rule engine confidence boost (rules are more reliable than LLM)
+  rule_confidence_boost: 10
+
+
+# =============================================================================
+# LLM Configuration (Ollama)
+# =============================================================================
+llm:
+  # Model to use (must be pulled in Ollama)
+  model: "qwen2.5:14b"
+  
+  # Ollama API endpoint
+  base_url: "http://localhost:11434"
+  
+  # Request timeout in seconds
+  timeout: 60
+  
+  # Maximum retries for invalid JSON responses
+  max_retries: 3
+  
+  # Maximum content excerpt to send to LLM (bytes)
+  max_excerpt_bytes: 8192

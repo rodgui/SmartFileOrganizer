@@ -1,175 +1,143 @@
-![AI Document Organizer Banner](assets/banner.svg)
+![Smart File Organizer Banner](assets/banner.svg)
 
-# AI Document Organizer
+# Smart File Organizer
 
-An intelligent document organization application powered by AI, supporting both Google Gemini and OpenAI models.
+AI-powered file organization with multiple backends: **Local (Ollama)**, **Google Gemini**, and **OpenAI**.
 
-## Overview
+## ✨ Key Features
 
-The AI Document Organizer helps you automatically organize your documents by analyzing their content with advanced AI models. The application can process and categorize multiple file formats, creating a structured folder system with meaningful categories based on document content.
+- **🔒 Privacy-First**: Use local AI (Ollama) for 100% offline operation
+- **☁️ Cloud AI**: Optional Gemini/OpenAI for best quality
+- **🛡️ Safe by Default**: Dry-run mode, never deletes, never overwrites
+- **📝 Rule-Based**: Deterministic rules for common files
+- **🔍 AI Fallback**: Semantic classification for complex cases
 
-## Project Structure
-
-```
-AI-Document-Organizer/
-├── src/                      # All source code
-│   ├── ai_analyzer.py        # Google Gemini AI integration
-│   ├── openai_analyzer.py    # OpenAI integration
-│   ├── ai_service_factory.py # Factory for creating AI services
-│   ├── file_analyzer.py      # Document scanning and analysis
-│   ├── file_organizer.py     # Document organization
-│   ├── file_parser.py        # Content extraction from files
-│   ├── gui.py                # User interface
-│   ├── settings_manager.py   # Application settings
-│   ├── media_analyzer.py     # Audio/video file analysis
-│   ├── transcription_service.py # Audio transcription service
-│   ├── cloud_integration.py  # Cloud storage integration
-│   ├── organization_scheme.py # Organization scheme management
-│   ├── templates/            # Organization templates
-│   └── utils.py             # Helper utilities
-├── docs/                     # Documentation
-│   ├── README.md             # User guide
-│   ├── QUICK_START_GUIDE.md  # Quick start guide
-│   ├── DEVELOPER_GUIDE.md    # Developer documentation
-│   └── ALTERNATIVE_AI_MODELS.md # AI model information
-├── assets/                   # Application assets
-│   └── generated-icon.png    # Application icon
-├── packaging/                # Packaging-related files
-│   ├── ai_document_organizer.spec # PyInstaller specification
-│   ├── installer.nsi         # NSIS installer script
-│   └── build_exe.py         # Build script
-├── tests/                    # Test files
-├── main.py                   # Main entry point
-├── requirements.txt          # Dependencies
-└── README.md                 # This file
-```
-
-## Features
-
-- **Smart Document Analysis**: Uses Google Gemini or OpenAI models to understand document content
-- **Multiple AI Model Support**:
-  - Google Gemini models (2.0 Flash, 1.5 Flash, 1.5 Pro, etc.)
-  - OpenAI models (GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, etc.)
-- **In-App API Key Management**: Enter and save API keys directly in the settings
-- **Model Selection**: Choose from available AI models for each service
-- **Automatic Categorization**: Creates logical folder structure based on document topics and content
-- **Multi-Format Support**: Works with various file types:
-  - Documents: CSV, Excel, HTML, Markdown, Text, Word
-  - Images: JPG, PNG, GIF, BMP, TIFF, WebP
-  - Audio: MP3, WAV, FLAC, AAC, OGG, M4A
-  - Video: MP4, AVI, MKV, MOV, WMV, WebM, FLV
-- **Content Extraction**: Automatically extracts and analyzes text from all supported formats
-- **Media Analysis**:
-  - Audio file analysis (duration, bitrate, channels, etc.)
-  - Video file analysis (resolution, frame rate, codecs, etc.)
-  - Audio waveform generation
-  - Video thumbnail generation
-  - Audio transcription with multiple providers
-- **Cloud Storage Integration**:
-  - Support for Google Drive, OneDrive, and Dropbox
-  - Bidirectional synchronization
-  - Conflict resolution
-  - Selective sync by file type
-  - Bandwidth control
-- **Organization Schemes**:
-  - Import/export organization rules
-  - Predefined templates for common use cases
-  - Custom rule creation
-  - Rule conflict detection
-  - Scheme merging and validation
-- **Windows-Optimized**: Native Windows interface with proper file handling
-- **Batch Processing**: Processes files in configurable batches to optimize performance
-- **Rate Limiting Controls**: Configure batch size and delay to avoid API rate limits
-
-## Requirements
-
-- Windows 10/11
-- Python 3.8 or higher
-- API key for Google Gemini or OpenAI
-- FFmpeg for audio/video processing
-- Optional: Cloud storage provider credentials
-
-## Installation
-
-1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/yourusername/ai-document-organizer.git
-   cd ai-document-organizer
-   ```
-
-2. Install dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Install FFmpeg:
-   - Download from [FFmpeg official website](https://ffmpeg.org/download.html)
-   - Add FFmpeg to your system PATH
-
-4. Set up your API keys:
-   - In the application settings (recommended)
-   - Or as environment variables:
-
-     ```bash
-     # For Google Gemini API
-     set GOOGLE_API_KEY=your_api_key_here
-
-     # OR for OpenAI API
-     set OPENAI_API_KEY=your_api_key_here
-
-     # For cloud storage (optional)
-     set GOOGLE_DRIVE_CREDENTIALS=path_to_credentials.json
-     set ONEDRIVE_CLIENT_ID=your_client_id
-     set ONEDRIVE_CLIENT_SECRET=your_client_secret
-     set DROPBOX_APP_KEY=your_app_key
-     set DROPBOX_APP_SECRET=your_app_secret
-     ```
-
-## Running the Application
+## 🚀 Quick Start
 
 ```bash
-python main.py
+# Install
+git clone https://github.com/whoisdsmith/SmartFileOrganizer.git
+cd SmartFileOrganizer
+pip install -r requirements.txt
+
+# Check status
+python organize.py info
+
+# Organize files (dry-run)
+python organize.py plan ~/Downloads
+
+# Execute (when ready)
+python organize.py execute plans/plan_*.json --apply
 ```
 
-## Documentation
+[📖 Full Quick Start Guide](docs/getting-started/QUICK_START.md)
 
-- [User Guide](docs/README.md)
-- [Quick Start Guide](docs/QUICK_START_GUIDE.md)
-- [Developer Guide](docs/DEVELOPER_GUIDE.md)
-- [Alternative AI Models](docs/ALTERNATIVE_AI_MODELS.md)
+## 🎯 AI Backends
 
-## Organization Templates
+| Backend | Command | Privacy | Cost | Speed |
+|---------|---------|---------|------|-------|
+| **Local (Ollama)** | `--local` | ✅ Offline | Free | Good |
+| **Google Gemini** | `--gemini` | Cloud | Pay | Fast |
+| **OpenAI** | `--openai` | Cloud | Pay | Fast |
+| **Rules Only** | `--rules-only` | ✅ Offline | Free | Fastest |
 
-The application comes with predefined organization templates:
+```bash
+# Use local AI (requires Ollama)
+python organize.py --local plan ~/Documents
 
-- **Media Organization**: Rules for organizing audio and video files by type, metadata, resolution, and duration
-- **Cloud Storage Sync**: Configuration for synchronizing files with cloud storage providers
-- **Custom Templates**: Create and share your own organization schemes
+# Use Gemini
+python organize.py --gemini plan ~/Documents
 
-## Cloud Storage Support
+# Use rules only (no AI)
+python organize.py --rules-only plan ~/Documents
+```
 
-Supported cloud storage providers:
+## 📋 Supported Formats
 
-- **Google Drive**: Full integration with Google Drive API
-- **OneDrive**: Integration with Microsoft Graph API
-- **Dropbox**: Integration with Dropbox API
+| Type | Extensions | Extraction |
+|------|------------|------------|
+| Documents | PDF, DOCX, PPTX, XLSX | Text content |
+| Text | TXT, MD, JSON, XML, HTML | Full text |
+| Images | JPG, PNG, GIF, HEIC, etc. | EXIF metadata |
+| **Audio** | MP3, WAV, FLAC, OGG, AAC, M4A | Duration, bitrate, tags |
+| **Video** | MP4, AVI, MKV, MOV, WebM | Resolution, codec, duration |
+| eBooks | EPUB, MOBI, AZW | Format detection |
 
-Features:
+## 📁 Categories
 
-- Bidirectional synchronization
-- Selective sync by file type
-- Conflict resolution
-- Version control
-- Bandwidth management
-- Progress tracking
-- Error handling and retry mechanisms
+Files are organized into:
 
-## Packaging for Distribution
+| Category | Description |
+|----------|-------------|
+| `01_Trabalho` | Work documents |
+| `02_Financas` | Financial docs |
+| `03_Estudos` | Study materials |
+| `04_Livros` | eBooks |
+| `05_Pessoal` | Personal files, media |
+| `90_Inbox_Organizar` | Needs review |
 
-To create a standalone Windows executable and installer, see the [Packaging Guide](packaging/PACKAGING.md).
+## 📂 Project Structure
 
-## License
+```
+SmartFileOrganizer/
+├── organize.py              # 🚀 Main entry point
+├── src/
+│   ├── organizer/           # CLI & pipeline
+│   │   ├── cli.py           # Command-line interface
+│   │   ├── scanner.py       # Directory scanner
+│   │   ├── extractor.py     # Content extraction
+│   │   ├── rules.py         # Rule engine
+│   │   ├── llm.py           # LLM classifier
+│   │   ├── planner.py       # Plan generation
+│   │   └── executor.py      # Safe execution
+│   ├── ai_analyzer.py       # Gemini integration
+│   ├── openai_analyzer.py   # OpenAI integration
+│   └── gui.py               # GUI (legacy)
+├── configs/
+│   └── rules.yaml           # Classification rules
+├── docs/                    # Documentation
+├── tests/                   # 261+ tests
+└── plans/                   # Generated plans
+```
 
-MIT License - See [LICENSE.txt](docs/LICENSE.txt) for details.
+## 🔧 Requirements
+
+- **Python 3.11+**
+- **Windows 10/11** (primary), macOS/Linux (supported)
+- **Ollama** (for local AI) - [Download](https://ollama.com)
+- **FFmpeg** (for video metadata) - [Download](https://ffmpeg.org)
+- **API keys** (for cloud AI) - Optional
+
+## 📚 Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Quick Start](docs/getting-started/QUICK_START.md) | Get started in 5 minutes |
+| [CLI Usage](docs/user-guide/CLI_USAGE.md) | Complete CLI reference |
+| [AI Backends](docs/reference/AI_BACKENDS.md) | Configure AI services |
+| [Rules Config](docs/reference/RULES_CONFIG.md) | Customize classification |
+| [Architecture](docs/developer/ARCHITECTURE.md) | Technical overview |
+
+## 🛡️ Safety Guarantees
+
+- ✅ **Dry-run by default** - No changes without `--apply`
+- ✅ **Never deletes** - Only MOVE/COPY/RENAME/SKIP
+- ✅ **Never overwrites** - Conflicts get `_v2`, `_v3` suffixes
+- ✅ **Audit trail** - Plans and manifests for rollback
+- ✅ **Excludes system files** - `.git`, `.exe`, etc.
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+pytest
+
+# With coverage
+pytest --cov=src/organizer
+```
+
+**261 tests passing** (1 skipped)
+
+## 📄 License
+
+MIT License - See [LICENSE.txt](docs/LICENSE.txt)

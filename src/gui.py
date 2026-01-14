@@ -90,9 +90,9 @@ class DocumentOrganizerApp:
                 duplicate_detector_adapter = compat_manager.get_adapter('DuplicateDetector') if compat_manager else None
                 
                 # Create V1-compatible instances through adapters
-                self.file_analyzer = FileAnalyzer()  # Keep V1 for now, will adapt later
-                self.file_organizer = file_organizer_adapter.create_instance()
                 self.settings_manager = settings_adapter.create_instance()
+                self.file_analyzer = FileAnalyzer(settings_manager=self.settings_manager)
+                self.file_organizer = file_organizer_adapter.create_instance()
                 
                 # Store plugin manager and compatibility manager for future use
                 self.plugin_manager = plugin_manager
@@ -104,14 +104,14 @@ class DocumentOrganizerApp:
                 logger.error(f"Error initializing with V2 components: {e}")
                 logger.warning("Falling back to V1 components")
                 self.use_v2 = False
-                self.file_analyzer = FileAnalyzer()
-                self.file_organizer = FileOrganizer()
                 self.settings_manager = SettingsManager()
+                self.file_analyzer = FileAnalyzer(settings_manager=self.settings_manager)
+                self.file_organizer = FileOrganizer()
         else:
             # Standard V1 initialization
-            self.file_analyzer = FileAnalyzer()
-            self.file_organizer = FileOrganizer()
             self.settings_manager = SettingsManager()
+            self.file_analyzer = FileAnalyzer(settings_manager=self.settings_manager)
+            self.file_organizer = FileOrganizer()
         self.duplicate_detector = DuplicateDetector()
         self.search_engine = SearchEngine()
         self.tag_manager = TagManager()
@@ -220,6 +220,24 @@ class DocumentOrganizerApp:
         self.summary_file_format_var = tk.StringVar(
             value=self.settings_manager.get_setting("document_summarization.summary_file_format", "md"))
 
+        # AI Service settings
+        self.ai_provider_var = tk.StringVar(
+            value=self.settings_manager.get_setting("ai_service.service_type", "google"))
+        self.google_api_key_var = tk.StringVar(
+            value=self.settings_manager.get_api_key("google"))
+        self.openai_api_key_var = tk.StringVar(
+            value=self.settings_manager.get_api_key("openai"))
+        self.google_model_var = tk.StringVar(
+            value=self.settings_manager.get_setting("ai_service.google_model", "models/gemini-2.0-flash"))
+        self.openai_model_var = tk.StringVar(
+            value=self.settings_manager.get_setting("ai_service.openai_model", "gpt-4.1-nano"))
+        self.ollama_url_var = tk.StringVar(
+            value=self.settings_manager.get_setting("ai_service.ollama_url", "http://localhost:11434"))
+        self.ollama_model_var = tk.StringVar(
+            value=self.settings_manager.get_setting("ai_service.ollama_model", "llama3.2"))
+        self.api_rate_limit_var = tk.StringVar(
+            value=str(self.settings_manager.get_setting("ai_service.requests_per_minute", 30)))
+
         # Current state for rule editing
         self.selected_rule = None
         self.current_job_id = None
@@ -325,10 +343,8 @@ class DocumentOrganizerApp:
         self.target_button = ttk.Button(
             self.dir_frame, text="Browse...", command=self.browse_target)
 
-        # Create the contents of the new tabs
-        self._create_rules_tab()
-        self._create_images_tab()
-        self._create_batch_tab()
+        # NOTE: Tab contents (_create_rules_tab, _create_images_tab, _create_batch_tab)
+        # are created in _create_widgets() - do not duplicate here
 
         # Create options frame
         self.options_frame = ttk.LabelFrame(
@@ -683,8 +699,7 @@ class DocumentOrganizerApp:
         self.tagged_files_tree.configure(
             yscrollcommand=self.tagged_files_yscroll.set)
 
-        # Create settings tab content
-        self._create_settings_widgets()
+        # Note: Settings widgets are created in _create_widgets() via _create_settings_widgets()
 
     def _setup_layout(self):
         """Set up the layout of the GUI widgets"""
@@ -954,7 +969,28 @@ class DocumentOrganizerApp:
         self.status_frame.columnconfigure(1, weight=1)
         self.status_frame.columnconfigure(2, weight=1)
 
-    def browse_source(self):
+    def _normalize_file_data(self, file_info):
+        """
+        Normalize file data from FileAnalyzer to GUI format.
+        FileAnalyzer returns different field names than what GUI expects.
+        """
+        ai_analysis = file_info.get("ai_analysis", {})
+        return {
+            "filename": file_info.get("file_name", os.path.basename(file_info.get("file_path", ""))),
+            "path": file_info.get("file_path", ""),
+            "size": file_info.get("file_size", 0),
+            "file_type": file_info.get("file_type", "Unknown"),
+            "category": ai_analysis.get("category", "Unclassified"),
+            "keywords": ai_analysis.get("keywords", []),
+            "summary": ai_analysis.get("summary", ""),
+            "theme": ai_analysis.get("theme", ""),
+            "metadata": file_info.get("metadata", {}),
+            "content": file_info.get("content", ""),
+            # Preserve original data for detailed view
+            "_original": file_info
+        }
+
+    def browse_source(self, save=False):
         """Browse for source directory (Windows style)"""
         # Use standard tkinter dialog (works on all platforms)
         directory = filedialog.askdirectory(
@@ -965,8 +1001,11 @@ class DocumentOrganizerApp:
             # Convert to OS-appropriate path format
             directory = os.path.normpath(directory)
             self.source_dir.set(directory)
+            if save:
+                self.settings_manager.set_setting("last_source_dir", directory)
+                self.settings_manager.save_settings()
 
-    def browse_target(self):
+    def browse_target(self, save=False):
         """Browse for target directory (Windows style)"""
         # Use standard tkinter dialog (works on all platforms)
         directory = filedialog.askdirectory(
@@ -977,6 +1016,9 @@ class DocumentOrganizerApp:
             # Convert to OS-appropriate path format
             directory = os.path.normpath(directory)
             self.target_dir.set(directory)
+            if save:
+                self.settings_manager.set_setting("last_target_dir", directory)
+                self.settings_manager.save_settings()
 
     def start_scan(self):
         """Start the file scanning process in a separate thread"""
@@ -1042,8 +1084,8 @@ class DocumentOrganizerApp:
             # Scan the directory with progress tracking
             files = self.file_analyzer.scan_directory(
                 directory,
-                batch_size=int(batch_size) if batch_size else None,
-                batch_delay=batch_delay,
+                batch_size=int(batch_size) if batch_size else 5,
+                batch_delay=float(batch_delay) if batch_delay else 1.0,
                 callback=progress_callback
             )
 
@@ -1064,13 +1106,24 @@ class DocumentOrganizerApp:
                 message_type, message = self.queue.get_nowait()
 
                 if message_type == "progress":
-                    current, total, status_message = message[:3] if isinstance(message, (list, tuple)) and len(message) >= 3 else (0, 0, str(message))
-                    if total > 0:
-                        self.progress_var.set(current / total * 100)
+                    # Handle both dict and tuple formats
+                    if isinstance(message, dict):
+                        current = message.get("processed", 0)
+                        total = message.get("total", 0)
+                        status_message = message.get("status", "Processing...")
+                        percentage = message.get("percentage", 0)
+                    elif isinstance(message, (list, tuple)) and len(message) >= 3:
+                        current, total, status_message = message[:3]
+                        percentage = int((current / max(1, total)) * 100)
                     else:
-                        self.progress_var.set(0)
+                        current, total, status_message = 0, 0, str(message)
+                        percentage = 0
+                    
+                    self.progress_var.set(percentage)
                     self.status_var.set(status_message)
-                    self.status_label.update()
+                    self.status_label.config(text=status_message)
+                    self.processed_label.config(text=f"Processed: {current}")
+                    self.total_label.config(text=f"Total: {total}")
 
                 elif message_type == "update_files":
                     self.update_file_list(message)
@@ -1083,6 +1136,15 @@ class DocumentOrganizerApp:
 
                 elif message_type == "success":
                     messagebox.showinfo("Success", message)
+
+                elif message_type == "files":
+                    # Handle scanned files result
+                    # update_file_list will normalize and store in self.analyzed_files
+                    self.update_file_list(message)
+                    file_count = len(self.analyzed_files)
+                    self.status_label.config(text=f"Scan complete: {file_count} files found")
+                    self.total_label.config(text=f"Total: {file_count}")
+                    self.processed_label.config(text=f"Processed: {file_count}")
 
                 elif message_type == "cancelled":
                     messagebox.showinfo("Cancelled", "Operation was cancelled")
@@ -1102,6 +1164,24 @@ class DocumentOrganizerApp:
 
                 elif message_type == "update_job_list":
                     self.update_job_list()
+
+                elif message_type == "duplicates":
+                    # Handle duplicate detection results
+                    self.duplicate_groups = message
+                    self._update_duplicates_tree(message)
+                    self.status_label.config(text=f"Found {len(message)} duplicate groups")
+                    self.handle_dup_button.config(state=tk.NORMAL if message else tk.DISABLED)
+
+                elif message_type == "search_results":
+                    # Handle search results
+                    self._update_search_results(message)
+                    self.status_label.config(text=f"Found {len(message)} results")
+
+                elif message_type == "index_results":
+                    # Handle indexing results
+                    indexed_count = message.get("indexed", 0) if isinstance(message, dict) else len(message)
+                    self.status_label.config(text=f"Indexed {indexed_count} files")
+                    messagebox.showinfo("Indexing Complete", f"Successfully indexed {indexed_count} files")
 
                 elif message_type == "reset_ui":
                     # Reset batch processing UI
@@ -1134,14 +1214,61 @@ class DocumentOrganizerApp:
         if self.root:
             self.root.after(100, self.consume_queue)
 
+    def _update_duplicates_tree(self, duplicate_groups):
+        """Update the duplicates treeview with results"""
+        # Clear existing items
+        for item in self.dup_tree.get_children():
+            self.dup_tree.delete(item)
+        
+        # Add duplicate groups
+        for i, group in enumerate(duplicate_groups):
+            files = group.get("files", [])
+            if files:
+                file_names = ", ".join([os.path.basename(f) for f in files[:3]])
+                if len(files) > 3:
+                    file_names += f"... (+{len(files) - 3} more)"
+                total_size = sum(os.path.getsize(f) for f in files if os.path.exists(f))
+                self.dup_tree.insert("", tk.END, values=(
+                    f"Group {i + 1}",
+                    file_names,
+                    get_readable_size(total_size)
+                ))
+
+    def _update_search_results(self, results):
+        """Update the search results treeview"""
+        # Clear existing items
+        for item in self.search_tree.get_children():
+            self.search_tree.delete(item)
+        
+        # Add search results
+        for result in results:
+            self.search_tree.insert("", tk.END, values=(
+                result.get("filename", result.get("file_name", "")),
+                result.get("category", ""),
+                result.get("file_type", ""),
+                get_readable_size(result.get("size", result.get("file_size", 0)))
+            ))
+
     def update_file_list(self, files):
         """Update the file list with scanned files"""
         # Clear existing items
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        # Add files to the treeview
+        # Store original files for FileOrganizer (needs original format)
+        self.analyzed_files_original = files
+        
+        # Normalize and store files for GUI display
+        normalized_files = []
         for file in files:
+            normalized = self._normalize_file_data(file)
+            normalized_files.append(normalized)
+        
+        # Update analyzed_files with normalized data for GUI
+        self.analyzed_files = normalized_files
+
+        # Add files to the treeview
+        for file in normalized_files:
             keywords = ", ".join(file.get("keywords", []))
             size = get_readable_size(file.get("size", 0))
 
@@ -1304,7 +1431,9 @@ class DocumentOrganizerApp:
 
     def organize_files(self):
         """Organize the files based on AI analysis"""
-        if not self.analyzed_files:
+        # Use original file data (not normalized) for FileOrganizer
+        files_to_organize = getattr(self, 'analyzed_files_original', None)
+        if not files_to_organize:
             messagebox.showinfo(
                 "Info", "No files to organize. Please scan files first.")
             return
@@ -1327,7 +1456,7 @@ class DocumentOrganizerApp:
         self.progress_bar.start(10)
         self.status_label.config(text="Organizing files...")
         self.progress_details.config(text="Preparing to organize files...")
-        self.processed_label.config(text=f"Files: {len(self.analyzed_files)}")
+        self.processed_label.config(text=f"Files: {len(files_to_organize)}")
         self.total_label.config(text="Copying: 0")
         self.batch_status_label.config(text="")
 
@@ -1337,10 +1466,10 @@ class DocumentOrganizerApp:
         # Save organization rules to settings
         self.save_organization_rules()
 
-        # Start organization thread
+        # Start organization thread - pass ORIGINAL data, not normalized
         organize_thread = threading.Thread(
             target=self.organize_files_thread,
-            args=(self.analyzed_files, target_dir)
+            args=(files_to_organize, target_dir)
         )
         organize_thread.daemon = True
         organize_thread.start()
@@ -1584,7 +1713,7 @@ class DocumentOrganizerApp:
             messagebox.showerror(
                 "Error", f"Could not save summary file format setting: {str(e)}")
                 
-    def browse_rules_file(self):
+    def browse_rules_file(self, save=False):
         """Browse for a rules file"""
         try:
             file_path = filedialog.askopenfilename(
@@ -1592,6 +1721,9 @@ class DocumentOrganizerApp:
                 filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")])
             if file_path:
                 self.rules_file_var.set(file_path)
+                if save:
+                    self.settings_manager.set_setting("organization_rules.rules_file", file_path)
+                    self.settings_manager.save_settings()
         except Exception as e:
             logger.error(f"Error browsing for rules file: {str(e)}")
             messagebox.showerror(
@@ -1777,15 +1909,150 @@ class DocumentOrganizerApp:
         self.theme_combo.bind("<<ComboboxSelected>>",
                               lambda e: self.apply_theme())
 
-        # Organization settings tab
+        # ==== AI Settings Tab ====
+        self.ai_settings_tab = ttk.Frame(self.settings_notebook, padding=10)
+        self.settings_notebook.add(self.ai_settings_tab, text="AI Settings")
+
+        # AI Provider selection frame
+        self.ai_provider_frame = ttk.LabelFrame(
+            self.ai_settings_tab, text="AI Provider", padding=10)
+
+        # Provider selection
+        self.ai_provider_label = ttk.Label(
+            self.ai_provider_frame, text="Select AI Provider:")
+        self.ai_provider_combo = ttk.Combobox(
+            self.ai_provider_frame, textvariable=self.ai_provider_var,
+            values=["google", "openai", "ollama"], state="readonly", width=15)
+        self.ai_provider_combo.bind("<<ComboboxSelected>>", self._on_ai_provider_change)
+
+        self.ai_provider_info = ttk.Label(
+            self.ai_provider_frame,
+            text="Google Gemini (recommended), OpenAI GPT, or Local Ollama")
+
+        # Google Gemini settings frame
+        self.google_settings_frame = ttk.LabelFrame(
+            self.ai_settings_tab, text="Google Gemini Settings", padding=10)
+
+        self.google_api_key_label = ttk.Label(
+            self.google_settings_frame, text="Google API Key:")
+        self.google_api_key_entry = ttk.Entry(
+            self.google_settings_frame, textvariable=self.google_api_key_var, width=50, show="*")
+        self.google_api_key_show_var = tk.BooleanVar(value=False)
+        self.google_api_key_show_check = ttk.Checkbutton(
+            self.google_settings_frame, text="Show",
+            variable=self.google_api_key_show_var,
+            command=lambda: self.google_api_key_entry.config(
+                show="" if self.google_api_key_show_var.get() else "*"))
+        self.google_api_key_save = ttk.Button(
+            self.google_settings_frame, text="Save", command=self._save_google_api_key)
+
+        self.google_model_label = ttk.Label(
+            self.google_settings_frame, text="Model:")
+        self.google_model_combo = ttk.Combobox(
+            self.google_settings_frame, textvariable=self.google_model_var,
+            values=["models/gemini-2.0-flash", "models/gemini-1.5-pro", "models/gemini-1.5-flash"],
+            width=30)
+        self.google_model_save = ttk.Button(
+            self.google_settings_frame, text="Save", command=self._save_google_model)
+
+        self.google_test_button = ttk.Button(
+            self.google_settings_frame, text="Test Connection", command=self._test_google_connection)
+
+        # OpenAI settings frame
+        self.openai_settings_frame = ttk.LabelFrame(
+            self.ai_settings_tab, text="OpenAI Settings", padding=10)
+
+        self.openai_api_key_label = ttk.Label(
+            self.openai_settings_frame, text="OpenAI API Key:")
+        self.openai_api_key_entry = ttk.Entry(
+            self.openai_settings_frame, textvariable=self.openai_api_key_var, width=50, show="*")
+        self.openai_api_key_show_var = tk.BooleanVar(value=False)
+        self.openai_api_key_show_check = ttk.Checkbutton(
+            self.openai_settings_frame, text="Show",
+            variable=self.openai_api_key_show_var,
+            command=lambda: self.openai_api_key_entry.config(
+                show="" if self.openai_api_key_show_var.get() else "*"))
+        self.openai_api_key_save = ttk.Button(
+            self.openai_settings_frame, text="Save", command=self._save_openai_api_key)
+
+        self.openai_model_label = ttk.Label(
+            self.openai_settings_frame, text="Model:")
+        self.openai_model_combo = ttk.Combobox(
+            self.openai_settings_frame, textvariable=self.openai_model_var,
+            values=["gpt-4.1-nano", "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"],
+            width=30)
+        self.openai_model_save = ttk.Button(
+            self.openai_settings_frame, text="Save", command=self._save_openai_model)
+
+        self.openai_test_button = ttk.Button(
+            self.openai_settings_frame, text="Test Connection", command=self._test_openai_connection)
+
+        # Ollama (Local) settings frame
+        self.ollama_settings_frame = ttk.LabelFrame(
+            self.ai_settings_tab, text="Ollama (Local) Settings", padding=10)
+
+        self.ollama_url_label = ttk.Label(
+            self.ollama_settings_frame, text="Ollama URL:")
+        self.ollama_url_entry = ttk.Entry(
+            self.ollama_settings_frame, textvariable=self.ollama_url_var, width=40)
+        self.ollama_url_info = ttk.Label(
+            self.ollama_settings_frame, text="Default: http://localhost:11434")
+
+        self.ollama_model_label = ttk.Label(
+            self.ollama_settings_frame, text="Model:")
+        self.ollama_model_combo = ttk.Combobox(
+            self.ollama_settings_frame, textvariable=self.ollama_model_var,
+            values=["llama3.2", "llama3.1", "mistral", "qwen2.5:14b", "phi3"],
+            width=30)
+        self.ollama_refresh_button = ttk.Button(
+            self.ollama_settings_frame, text="Refresh Models", command=self._refresh_ollama_models)
+        self.ollama_save_button = ttk.Button(
+            self.ollama_settings_frame, text="Save", command=self._save_ollama_settings)
+
+        self.ollama_test_button = ttk.Button(
+            self.ollama_settings_frame, text="Test Connection", command=self._test_ollama_connection)
+
+        # Rate limiting frame
+        self.rate_limit_frame = ttk.LabelFrame(
+            self.ai_settings_tab, text="Rate Limiting", padding=10)
+
+        self.rate_limit_label = ttk.Label(
+            self.rate_limit_frame, text="Requests per minute:")
+        self.rate_limit_entry = ttk.Entry(
+            self.rate_limit_frame, textvariable=self.api_rate_limit_var, width=10)
+        self.rate_limit_save = ttk.Button(
+            self.rate_limit_frame, text="Save", command=self._save_rate_limit)
+        self.rate_limit_info = ttk.Label(
+            self.rate_limit_frame, text="Recommended: 30 for Google, 60 for OpenAI")
+
+        # Organization settings tab with scrollbar
         self.organization_settings_tab = ttk.Frame(
-            self.settings_notebook, padding=10)
+            self.settings_notebook, padding=0)
         self.settings_notebook.add(
             self.organization_settings_tab, text="Organization Settings")
 
-        # Organization rules frame
+        # Create canvas and scrollbar for Organization Settings
+        self.org_canvas = tk.Canvas(self.organization_settings_tab, highlightthickness=0)
+        self.org_scrollbar = ttk.Scrollbar(
+            self.organization_settings_tab, orient="vertical", command=self.org_canvas.yview)
+        self.org_scrollable_frame = ttk.Frame(self.org_canvas, padding=10)
+        
+        # Configure canvas scrolling
+        self.org_scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.org_canvas.configure(scrollregion=self.org_canvas.bbox("all")))
+        
+        self.org_canvas.create_window((0, 0), window=self.org_scrollable_frame, anchor="nw")
+        self.org_canvas.configure(yscrollcommand=self.org_scrollbar.set)
+        
+        # Enable mousewheel scrolling
+        def _on_mousewheel(event):
+            self.org_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        self.org_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        # Organization rules frame (now inside scrollable frame)
         self.organization_rules_frame = ttk.LabelFrame(
-            self.organization_settings_tab, text="Organization Rules", padding=10)
+            self.org_scrollable_frame, text="Organization Rules", padding=10)
 
         # Create category folders
         self.create_folders_check = ttk.Checkbutton(
@@ -1985,6 +2252,160 @@ class DocumentOrganizerApp:
             self.organization_rules_frame,
             text="Format for summary files (md, txt, html, etc.)")
 
+        # ==== LAYOUT FOR SETTINGS WIDGETS ====
+        
+        # Pack the main settings notebook
+        self.settings_notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # === General Settings Tab Layout ===
+        # Directory settings frame
+        self.dir_settings_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.source_settings_label.grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.source_settings_entry.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=5)
+        self.source_settings_button.grid(row=0, column=2, padx=5, pady=5)
+        self.target_settings_label.grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        self.target_settings_entry.grid(row=1, column=1, sticky=tk.EW, padx=5, pady=5)
+        self.target_settings_button.grid(row=1, column=2, padx=5, pady=5)
+        self.dir_settings_frame.columnconfigure(1, weight=1)
+        
+        # Batch processing frame
+        self.batch_settings_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.batch_size_label.grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.batch_size_entry.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+        self.batch_size_button.grid(row=0, column=2, padx=5, pady=5)
+        self.batch_size_info.grid(row=0, column=3, sticky=tk.W, padx=5, pady=5)
+        self.batch_delay_label.grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        self.batch_delay_entry.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
+        self.batch_delay_button.grid(row=1, column=2, padx=5, pady=5)
+        self.batch_delay_info.grid(row=1, column=3, sticky=tk.W, padx=5, pady=5)
+        
+        # Logging settings frame
+        self.logging_settings_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.log_to_file_only_check.grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        
+        # Theme settings frame
+        self.theme_settings_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.theme_label.grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.theme_combo.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+        
+        # === AI Settings Tab Layout ===
+        # AI Provider frame
+        self.ai_provider_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.ai_provider_label.grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.ai_provider_combo.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+        self.ai_provider_info.grid(row=0, column=2, sticky=tk.W, padx=10, pady=5)
+
+        # Google settings frame
+        self.google_settings_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.google_api_key_label.grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.google_api_key_entry.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=5)
+        self.google_api_key_show_check.grid(row=0, column=2, padx=5, pady=5)
+        self.google_api_key_save.grid(row=0, column=3, padx=5, pady=5)
+        self.google_model_label.grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        self.google_model_combo.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
+        self.google_model_save.grid(row=1, column=3, padx=5, pady=5)
+        self.google_test_button.grid(row=2, column=1, sticky=tk.W, padx=5, pady=10)
+        self.google_settings_frame.columnconfigure(1, weight=1)
+
+        # OpenAI settings frame
+        self.openai_settings_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.openai_api_key_label.grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.openai_api_key_entry.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=5)
+        self.openai_api_key_show_check.grid(row=0, column=2, padx=5, pady=5)
+        self.openai_api_key_save.grid(row=0, column=3, padx=5, pady=5)
+        self.openai_model_label.grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        self.openai_model_combo.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
+        self.openai_model_save.grid(row=1, column=3, padx=5, pady=5)
+        self.openai_test_button.grid(row=2, column=1, sticky=tk.W, padx=5, pady=10)
+        self.openai_settings_frame.columnconfigure(1, weight=1)
+
+        # Ollama settings frame
+        self.ollama_settings_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.ollama_url_label.grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.ollama_url_entry.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=5)
+        self.ollama_url_info.grid(row=0, column=2, sticky=tk.W, padx=5, pady=5)
+        self.ollama_model_label.grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        self.ollama_model_combo.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
+        self.ollama_refresh_button.grid(row=1, column=2, padx=5, pady=5)
+        self.ollama_save_button.grid(row=1, column=3, padx=5, pady=5)
+        self.ollama_test_button.grid(row=2, column=1, sticky=tk.W, padx=5, pady=10)
+        self.ollama_settings_frame.columnconfigure(1, weight=1)
+
+        # Rate limit frame
+        self.rate_limit_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.rate_limit_label.grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.rate_limit_entry.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+        self.rate_limit_save.grid(row=0, column=2, padx=5, pady=5)
+        self.rate_limit_info.grid(row=0, column=3, sticky=tk.W, padx=10, pady=5)
+
+        # === Organization Settings Tab Layout (with scrollbar) ===
+        self.org_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.org_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.organization_rules_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        row = 0
+        # Basic organization options
+        self.create_folders_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.generate_summaries_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.include_metadata_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.copy_instead_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.use_custom_rules_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.rules_file_entry.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        self.rules_file_button.grid(row=row, column=1, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        
+        # Separator
+        ttk.Separator(self.organization_rules_frame, orient='horizontal').grid(
+            row=row, column=0, columnspan=3, sticky=tk.EW, pady=10)
+        row += 1
+        
+        # Processing options
+        self.use_process_pool_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.adaptive_workers_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        ttk.Label(self.organization_rules_frame, text="Max Workers:").grid(
+            row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        self.max_workers_entry.grid(row=row, column=1, sticky=tk.W, padx=5, pady=2)
+        self.max_workers_button.grid(row=row, column=2, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        ttk.Label(self.organization_rules_frame, text="Memory Limit %:").grid(
+            row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        self.memory_limit_entry.grid(row=row, column=1, sticky=tk.W, padx=5, pady=2)
+        self.memory_limit_button.grid(row=row, column=2, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.enable_pause_resume_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.save_job_state_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        
+        # Separator
+        ttk.Separator(self.organization_rules_frame, orient='horizontal').grid(
+            row=row, column=0, columnspan=3, sticky=tk.EW, pady=10)
+        row += 1
+        
+        # Image analysis options
+        self.image_analysis_enabled_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.extract_exif_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.generate_thumbnails_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.vision_api_enabled_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.detect_objects_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.detect_faces_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.extract_text_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        row += 1
+        self.content_moderation_check.grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+
     def save_logging_settings(self):
         """Save logging settings to the settings manager"""
         try:
@@ -1997,6 +2418,207 @@ class DocumentOrganizerApp:
             logger.error(f"Error saving logging settings: {str(e)}")
             messagebox.showerror(
                 "Error", f"Could not save logging settings: {str(e)}")
+
+    # ==== AI Settings Methods ====
+    def _on_ai_provider_change(self, event=None):
+        """Handle AI provider change"""
+        provider = self.ai_provider_var.get()
+        self.settings_manager.set_setting("ai_service.service_type", provider)
+        self.settings_manager.save_settings()
+        
+        # Reinitialize FileAnalyzer's AI analyzer with new provider
+        if hasattr(self, 'file_analyzer'):
+            self.file_analyzer.set_settings_manager(self.settings_manager)
+            logger.info(f"FileAnalyzer reinitialized with provider: {provider}")
+        
+        logger.info(f"AI provider changed to: {provider}")
+        messagebox.showinfo("AI Provider", f"AI provider set to: {provider}")
+
+    def _save_google_api_key(self):
+        """Save Google API key"""
+        try:
+            api_key = self.google_api_key_var.get().strip()
+            if not api_key:
+                messagebox.showwarning("Warning", "API key cannot be empty")
+                return
+            self.settings_manager.set_api_key("google", api_key)
+            logger.info("Google API key saved")
+            messagebox.showinfo("Success", "Google API key saved successfully")
+        except Exception as e:
+            logger.error(f"Error saving Google API key: {str(e)}")
+            messagebox.showerror("Error", f"Could not save API key: {str(e)}")
+
+    def _save_google_model(self):
+        """Save Google model selection"""
+        try:
+            model = self.google_model_var.get().strip()
+            self.settings_manager.set_setting("ai_service.google_model", model)
+            self.settings_manager.save_settings()
+            logger.info(f"Google model set to: {model}")
+            messagebox.showinfo("Success", f"Google model set to: {model}")
+        except Exception as e:
+            logger.error(f"Error saving Google model: {str(e)}")
+            messagebox.showerror("Error", f"Could not save model: {str(e)}")
+
+    def _test_google_connection(self):
+        """Test Google Gemini API connection"""
+        api_key = self.google_api_key_var.get().strip()
+        if not api_key:
+            messagebox.showwarning("Warning", "Please enter an API key first")
+            return
+        
+        try:
+            from google import genai
+            client = genai.Client(api_key=api_key)
+            # Test with a simple request
+            response = client.models.generate_content(
+                model=self.google_model_var.get(),
+                contents="Say 'Connection successful' in one word"
+            )
+            messagebox.showinfo("Success", f"Connection successful!\nResponse: {response.text[:100]}")
+            logger.info("Google API connection test successful")
+        except Exception as e:
+            logger.error(f"Google API connection test failed: {str(e)}")
+            messagebox.showerror("Connection Failed", f"Could not connect to Google API:\n{str(e)}")
+
+    def _save_openai_api_key(self):
+        """Save OpenAI API key"""
+        try:
+            api_key = self.openai_api_key_var.get().strip()
+            if not api_key:
+                messagebox.showwarning("Warning", "API key cannot be empty")
+                return
+            self.settings_manager.set_api_key("openai", api_key)
+            logger.info("OpenAI API key saved")
+            messagebox.showinfo("Success", "OpenAI API key saved successfully")
+        except Exception as e:
+            logger.error(f"Error saving OpenAI API key: {str(e)}")
+            messagebox.showerror("Error", f"Could not save API key: {str(e)}")
+
+    def _save_openai_model(self):
+        """Save OpenAI model selection"""
+        try:
+            model = self.openai_model_var.get().strip()
+            self.settings_manager.set_setting("ai_service.openai_model", model)
+            self.settings_manager.save_settings()
+            logger.info(f"OpenAI model set to: {model}")
+            messagebox.showinfo("Success", f"OpenAI model set to: {model}")
+        except Exception as e:
+            logger.error(f"Error saving OpenAI model: {str(e)}")
+            messagebox.showerror("Error", f"Could not save model: {str(e)}")
+
+    def _test_openai_connection(self):
+        """Test OpenAI API connection"""
+        api_key = self.openai_api_key_var.get().strip()
+        if not api_key:
+            messagebox.showwarning("Warning", "Please enter an API key first")
+            return
+        
+        try:
+            import openai
+            client = openai.OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
+                model=self.openai_model_var.get(),
+                messages=[{"role": "user", "content": "Say 'Connection successful' in one word"}],
+                max_tokens=10
+            )
+            messagebox.showinfo("Success", f"Connection successful!\nResponse: {response.choices[0].message.content}")
+            logger.info("OpenAI API connection test successful")
+        except Exception as e:
+            logger.error(f"OpenAI API connection test failed: {str(e)}")
+            messagebox.showerror("Connection Failed", f"Could not connect to OpenAI API:\n{str(e)}")
+
+    def _save_ollama_settings(self):
+        """Save Ollama settings"""
+        try:
+            url = self.ollama_url_var.get().strip()
+            model = self.ollama_model_var.get().strip()
+            self.settings_manager.set_setting("ai_service.ollama_url", url)
+            self.settings_manager.set_setting("ai_service.ollama_model", model)
+            self.settings_manager.save_settings()
+            
+            # Reinitialize FileAnalyzer if Ollama is the selected provider
+            current_provider = self.settings_manager.get_setting("ai_service.service_type", "google")
+            if current_provider == "ollama" and hasattr(self, 'file_analyzer'):
+                self.file_analyzer.set_settings_manager(self.settings_manager)
+                logger.info(f"FileAnalyzer reinitialized with new Ollama settings")
+            
+            logger.info(f"Ollama settings saved: URL={url}, Model={model}")
+            messagebox.showinfo("Success", "Ollama settings saved successfully")
+        except Exception as e:
+            logger.error(f"Error saving Ollama settings: {str(e)}")
+            messagebox.showerror("Error", f"Could not save Ollama settings: {str(e)}")
+
+    def _refresh_ollama_models(self):
+        """Refresh available Ollama models"""
+        url = self.ollama_url_var.get().strip()
+        if not url:
+            url = "http://localhost:11434"
+        
+        try:
+            import requests
+            response = requests.get(f"{url}/api/tags", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                models = [m["name"] for m in data.get("models", [])]
+                if models:
+                    self.ollama_model_combo["values"] = models
+                    messagebox.showinfo("Success", f"Found {len(models)} models:\n" + ", ".join(models[:10]))
+                else:
+                    messagebox.showwarning("No Models", "No models found. Please install models using 'ollama pull <model>'")
+            else:
+                messagebox.showerror("Error", f"Failed to get models: HTTP {response.status_code}")
+        except requests.exceptions.ConnectionError:
+            messagebox.showerror("Connection Error", f"Could not connect to Ollama at {url}\nMake sure Ollama is running.")
+        except Exception as e:
+            logger.error(f"Error refreshing Ollama models: {str(e)}")
+            messagebox.showerror("Error", f"Could not refresh models: {str(e)}")
+
+    def _test_ollama_connection(self):
+        """Test Ollama connection"""
+        url = self.ollama_url_var.get().strip()
+        model = self.ollama_model_var.get().strip()
+        if not url:
+            url = "http://localhost:11434"
+        if not model:
+            messagebox.showwarning("Warning", "Please select a model first")
+            return
+        
+        try:
+            import requests
+            response = requests.post(
+                f"{url}/api/generate",
+                json={"model": model, "prompt": "Say 'Connection successful' in one word", "stream": False},
+                timeout=30
+            )
+            if response.status_code == 200:
+                data = response.json()
+                messagebox.showinfo("Success", f"Connection successful!\nResponse: {data.get('response', '')[:100]}")
+                logger.info("Ollama connection test successful")
+            else:
+                messagebox.showerror("Error", f"Ollama returned HTTP {response.status_code}")
+        except requests.exceptions.ConnectionError:
+            messagebox.showerror("Connection Error", f"Could not connect to Ollama at {url}\nMake sure Ollama is running.")
+        except Exception as e:
+            logger.error(f"Ollama connection test failed: {str(e)}")
+            messagebox.showerror("Connection Failed", f"Could not connect to Ollama:\n{str(e)}")
+
+    def _save_rate_limit(self):
+        """Save API rate limit setting"""
+        try:
+            rate_limit = int(self.api_rate_limit_var.get().strip())
+            if rate_limit < 1 or rate_limit > 1000:
+                messagebox.showwarning("Warning", "Rate limit should be between 1 and 1000")
+                return
+            self.settings_manager.set_setting("ai_service.requests_per_minute", rate_limit)
+            self.settings_manager.save_settings()
+            logger.info(f"API rate limit set to: {rate_limit}")
+            messagebox.showinfo("Success", f"Rate limit set to {rate_limit} requests/minute")
+        except ValueError:
+            messagebox.showerror("Error", "Please enter a valid number")
+        except Exception as e:
+            logger.error(f"Error saving rate limit: {str(e)}")
+            messagebox.showerror("Error", f"Could not save rate limit: {str(e)}")
 
     def organize_files_thread(self, files, target_dir):
         """Thread for organizing files"""

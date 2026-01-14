@@ -18,6 +18,8 @@ import PyPDF2
 
 from .file_parser import FileParser
 from .ai_analyzer import AIAnalyzer
+from .openai_analyzer import OpenAIAnalyzer
+from .ollama_analyzer import OllamaAnalyzer
 from .image_analyzer import ImageAnalyzer
 from .media_analyzer import MediaAnalyzer
 from .transcription_service import TranscriptionService
@@ -31,11 +33,15 @@ class FileAnalyzer:
     Class responsible for analyzing files in a directory
     """
 
-    def __init__(self, config: Optional[Dict] = None):
+    def __init__(self, config: Optional[Dict] = None, settings_manager=None):
         self.config = config or {}
+        self.settings_manager = settings_manager
         self.logger = logging.getLogger(__name__)
         self.parser = FileParser()
-        self.ai_analyzer = AIAnalyzer()
+        
+        # Select AI analyzer based on provider setting
+        self._init_ai_analyzer()
+        
         self.image_analyzer = ImageAnalyzer()
         self.media_analyzer = MediaAnalyzer()
         self.transcription_service = TranscriptionService()
@@ -89,6 +95,28 @@ class FileAnalyzer:
         # Resource monitoring
         self.resource_monitor = ResourceMonitor()
         self.resource_monitor.start()
+
+    def _init_ai_analyzer(self):
+        """Initialize the appropriate AI analyzer based on settings"""
+        provider = "google"  # default
+        if self.settings_manager:
+            provider = self.settings_manager.get_setting("ai_service.service_type", "google")
+        
+        if provider == "openai":
+            logger.info("Using OpenAI analyzer")
+            self.ai_analyzer = OpenAIAnalyzer(settings_manager=self.settings_manager)
+        elif provider == "ollama":
+            logger.info("Using Ollama (local) analyzer")
+            self.ai_analyzer = OllamaAnalyzer(settings_manager=self.settings_manager)
+        else:
+            # Default to Google/Gemini
+            logger.info(f"Using Google/Gemini analyzer (provider: {provider})")
+            self.ai_analyzer = AIAnalyzer(settings_manager=self.settings_manager)
+
+    def set_settings_manager(self, settings_manager):
+        """Update settings manager and reinitialize AI analyzer"""
+        self.settings_manager = settings_manager
+        self._init_ai_analyzer()
 
     def scan_directory(self, directory_path, batch_size=None, batch_delay=None, callback=None,
                        use_processes=True, adaptive_workers=True, job_id=None, resume=False):
@@ -314,43 +342,10 @@ class FileAnalyzer:
         Returns:
             List of dictionaries with file information and analysis
         """
-        results = []
-
-        # Create a queue for IPC
-        result_queue = multiprocessing.Queue()
-
-    @staticmethod
-    def _worker_func(file_path, file_ext, result_queue, file_analyzer_instance):
-        try:
-            # Use the existing _analyze_file method from the passed instance
-            analysis_result = file_analyzer_instance._analyze_file(file_path, file_ext)
-            result_queue.put(analysis_result)
-        except Exception as e:
-            logger.error(f"Worker error processing {file_path}: {str(e)}")
-            result_queue.put(None)
-            return False
-
-        # Start processes
-        processes = []
-        for file_path, file_ext in file_batch:
-            p = multiprocessing.Process(
-                target=FileAnalyzer._worker_func,
-                args=(file_path, file_ext, result_queue, self) # Pass self to the static method
-            )
-            processes.append(p)
-            p.start()
-
-        # Collect results
-        for _ in range(len(file_batch)):
-            result = result_queue.get()
-            if result:
-                results.append(result)
-
-        # Wait for all processes to finish
-        for p in processes:
-            p.join()
-
-        return results
+        # For now, fall back to thread-based processing since multiprocessing
+        # with instance methods is complex in Python
+        # This avoids the pickling issues with multiprocessing
+        return self._process_batch(file_batch)
 
     def _process_single_file(self, file_path, file_ext):
         """
@@ -440,11 +435,10 @@ class FileAnalyzer:
             # Process with AI analyzer if content is available
             if file_info.get('content'):
                 try:
-                    # Get AI analysis
-                    ai_analysis = self.ai_analyzer.analyze_text(
+                    # Get AI analysis - use analyze_content(text, file_type)
+                    ai_analysis = self.ai_analyzer.analyze_content(
                         file_info['content'],
-                        file_path=file_path,
-                        metadata=file_info.get('metadata', {})
+                        file_ext.lstrip('.').upper() or 'TEXT'
                     )
                     file_info['ai_analysis'] = ai_analysis
                 except Exception as e:
@@ -456,11 +450,9 @@ class FileAnalyzer:
             if 'transcription' in file_info and 'text' in file_info['transcription']:
                 try:
                     # Get AI analysis of transcription
-                    transcription_analysis = self.ai_analyzer.analyze_text(
+                    transcription_analysis = self.ai_analyzer.analyze_content(
                         file_info['transcription']['text'],
-                        file_path=file_path,
-                        metadata=file_info.get('metadata', {}),
-                        context="This is a transcription of audio content."
+                        'TRANSCRIPTION'
                     )
                     file_info['transcription_analysis'] = transcription_analysis
                 except Exception as e:
